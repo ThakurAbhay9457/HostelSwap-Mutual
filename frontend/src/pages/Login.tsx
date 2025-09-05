@@ -5,7 +5,7 @@ import { Eye, EyeOff, LogIn, Shield, User } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login: React.FC = () => {
-  const { login, adminLogin } = useAuth()
+  const { login, adminLogin, requestPasswordReset, confirmPasswordReset, sendResetOtp, confirmResetOtp } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -14,6 +14,12 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [resetIdentifier, setResetIdentifier] = useState('')
+  const [resetToken, setResetToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [resetStage, setResetStage] = useState<'request' | 'confirm' | 'otp'>('request')
+  const [resetBusy, setResetBusy] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -38,6 +44,65 @@ const Login: React.FC = () => {
       toast.error(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenReset = () => {
+    setShowReset(true)
+    setResetIdentifier('')
+    setResetToken('')
+    setNewPassword('')
+    setResetStage('request')
+  }
+
+  const handleSendToken = async () => {
+    try {
+      setResetBusy(true)
+      const identifier = resetIdentifier.trim()
+      if (!identifier) {
+        toast.error('Please enter your ' + (isAdmin ? 'username' : 'email'))
+        return
+      }
+      if (isAdmin) {
+        const token = await requestPasswordReset(identifier, 'admin')
+        setResetStage('confirm')
+        setResetToken(token || '')
+        toast.success('Reset token generated.')
+      } else {
+        await sendResetOtp(identifier)
+        setResetStage('otp')
+        toast.success('OTP sent to your email')
+      }
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
+  const handleConfirmReset = async () => {
+    try {
+      setResetBusy(true)
+      const identifier = resetIdentifier.trim()
+      if (isAdmin) {
+        if (!identifier || !resetToken || !newPassword) {
+          toast.error('Fill all fields')
+          return
+        }
+        await confirmPasswordReset(identifier, 'admin', resetToken.trim(), newPassword)
+      } else {
+        if (!identifier || !resetToken || !newPassword) {
+          toast.error('Fill all fields')
+          return
+        }
+        await confirmResetOtp(identifier, resetToken.trim(), newPassword)
+      }
+      toast.success('Password reset successful. You can sign in now.')
+      setShowReset(false)
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setResetBusy(false)
     }
   }
 
@@ -151,6 +216,15 @@ const Login: React.FC = () => {
               </div>
             </div>
 
+            {!isAdmin && (
+              <div className="flex items-center justify-between -mt-2">
+                <span className="text-xs text-transparent">.</span>
+                <button type="button" onClick={handleOpenReset} className="text-sm text-primary-600 dark:text-primary-400 hover:underline">
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -181,6 +255,80 @@ const Login: React.FC = () => {
             </div>
           )}
         </div>
+
+        {showReset && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{resetStage === 'request' ? 'Reset your password' : 'Set new password'}</h3>
+              {resetStage === 'request' ? (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    {isAdmin ? 'Enter your admin username to receive a reset token.' : 'Enter your email to receive an OTP.'}
+                  </p>
+                  <input
+                    type="text"
+                    className="input-field mb-4"
+                    placeholder={isAdmin ? 'Admin username' : 'Email address'}
+                    value={resetIdentifier}
+                    onChange={(e) => setResetIdentifier(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button className="btn-secondary" onClick={() => setShowReset(false)}>Cancel</button>
+                    <button className="btn-primary disabled:opacity-50" disabled={resetBusy} onClick={handleSendToken}>Send</button>
+                  </div>
+                </>
+              ) : resetStage === 'confirm' ? (
+                <>
+                  <input
+                    type="text"
+                    className="input-field mb-3"
+                    placeholder="Paste reset token"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    className="input-field mb-4"
+                    placeholder="New password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <div className="flex justify-between">
+                    <button className="text-sm text-primary-600 dark:text-primary-400 hover:underline" onClick={() => setResetStage('request')}>Back</button>
+                    <div className="flex gap-2">
+                      <button className="btn-secondary" onClick={() => setShowReset(false)}>Cancel</button>
+                      <button className="btn-primary disabled:opacity-50" disabled={resetBusy} onClick={handleConfirmReset}>Reset password</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    className="input-field mb-3"
+                    placeholder="Enter OTP"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    className="input-field mb-4"
+                    placeholder="New password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <div className="flex justify-between">
+                    <button className="text-sm text-primary-600 dark:text-primary-400 hover:underline" onClick={() => setResetStage('request')}>Back</button>
+                    <div className="flex gap-2">
+                      <button className="btn-secondary" onClick={() => setShowReset(false)}>Cancel</button>
+                      <button className="btn-primary disabled:opacity-50" disabled={resetBusy} onClick={handleConfirmReset}>Reset password</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -6,6 +6,8 @@ const Admin = require('../models/Admin');
 // const passport = require('passport');
 // const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const twilio = require('twilio');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const studentSignupSchema = z.object({
   name: z.string(),
@@ -28,6 +30,18 @@ const adminSignupSchema = z.object({
 // Twilio config (replace with your credentials or use env)
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 const OTPs = {};
+const RESET_OTPs = {};
+
+// Email transporter (Mailtrap/Gmail/SMTP)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 // Google OAuth setup (replace with your credentials or use env)
 // passport.use(new GoogleStrategy({
@@ -132,6 +146,116 @@ exports.adminSignin = async (req, res) => {
         isAdmin: true
       }
     });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Password reset: request
+exports.requestPasswordReset = async (req, res) => {
+  try {
+    const { identifier, role } = req.body; // identifier: email for students, username for admins
+    if (!identifier || !role || !['student', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid request' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 15); // 15 minutes
+
+    if (role === 'student') {
+      const student = await Student.findOne({ email: identifier });
+      if (!student) return res.status(200).json({ message: 'If the account exists, an email was sent' });
+      student.resetToken = token;
+      student.resetTokenExpiresAt = expiresAt;
+      await student.save();
+    } else {
+      const admin = await Admin.findOne({ username: identifier });
+      if (!admin) return res.status(200).json({ message: 'If the account exists, an email was sent' });
+      admin.resetToken = token;
+      admin.resetTokenExpiresAt = expiresAt;
+      await admin.save();
+    }
+
+    // In a real app, send email/SMS. For now, return token for testing.
+    res.json({ message: 'Reset token generated', token });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Password reset: confirm
+exports.confirmPasswordReset = async (req, res) => {
+  try {
+    const { role, identifier, token, newPassword } = req.body;
+    if (!identifier || !role || !token || !newPassword) {
+      return res.status(400).json({ message: 'Invalid request' });
+    }
+
+    if (role === 'student') {
+      const student = await Student.findOne({ email: identifier, resetToken: token, resetTokenExpiresAt: { $gt: new Date() } });
+      if (!student) return res.status(400).json({ message: 'Invalid or expired token' });
+      student.password = await bcrypt.hash(newPassword, 10);
+      student.resetToken = undefined;
+      student.resetTokenExpiresAt = undefined;
+      await student.save();
+    } else {
+      const admin = await Admin.findOne({ username: identifier, resetToken: token, resetTokenExpiresAt: { $gt: new Date() } });
+      if (!admin) return res.status(400).json({ message: 'Invalid or expired token' });
+      admin.password = await bcrypt.hash(newPassword, 10);
+      admin.resetToken = undefined;
+      admin.resetTokenExpiresAt = undefined;
+      await admin.save();
+    }
+
+    res.json({ message: 'Password reset successful' });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Password reset via OTP (students by phone)
+exports.requestPasswordResetOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required' });
+    const student = await Student.findOne({ email });
+    if (!student) return res.status(200).json({ message: 'If the account exists, an OTP was sent' });
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 1000 * 60 * 10; // 10 minutes
+    RESET_OTPs[email] = { otp, expiresAt };
+    try {
+      if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+        await transporter.sendMail({
+          from: process.env.MAIL_FROM || 'no-reply@example.com',
+          to: email,
+          subject: 'Your password reset OTP',
+          text: `Your OTP is ${otp}. It expires in 10 minutes.`,
+        });
+      }
+    } catch (mailErr) {
+      console.error('Mail send error:', mailErr.message);
+    }
+    // Return OTP as well for dev/testing visibility
+    res.json({ message: 'OTP generated and emailed (if configured)', otp });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+exports.confirmPasswordResetOtp = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) return res.status(400).json({ message: 'Invalid request' });
+    const record = RESET_OTPs[email];
+    if (!record || record.otp !== otp || record.expiresAt < Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+    const student = await Student.findOne({ email });
+    if (!student) return res.status(400).json({ message: 'Account not found' });
+    student.password = await bcrypt.hash(newPassword, 10);
+    await student.save();
+    delete RESET_OTPs[email];
+    res.json({ message: 'Password reset successful' });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

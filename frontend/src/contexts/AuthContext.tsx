@@ -10,6 +10,10 @@ interface AuthContextType {
   register: (userData: RegisterData) => Promise<void>
   logout: () => void
   loading: boolean
+  requestPasswordReset: (identifier: string, role: 'student' | 'admin') => Promise<string>
+  confirmPasswordReset: (identifier: string, role: 'student' | 'admin', token: string, newPassword: string) => Promise<void>
+  sendResetOtp: (email: string) => Promise<string>
+  confirmResetOtp: (email: string, otp: string, newPassword: string) => Promise<void>
 }
 
 interface RegisterData {
@@ -109,6 +113,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }
 
+  const requestPasswordReset = async (identifier: string, role: 'student' | 'admin') => {
+    try {
+      const response = await api.post('/api/auth/password/request', { identifier, role })
+      return response.data.token as string
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Reset request failed')
+    }
+  }
+
+  const confirmPasswordReset = async (identifier: string, role: 'student' | 'admin', token: string, newPassword: string) => {
+    try {
+      await api.post('/api/auth/password/confirm', { identifier, role, token, newPassword })
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Reset confirmation failed')
+    }
+  }
+
+  const sendResetOtp = async (email: string) => {
+    try {
+      const res = await api.post('/api/auth/password/request-otp', { email })
+      return res.data.otp as string
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'OTP send failed')
+    }
+  }
+
+  const confirmResetOtp = async (email: string, otp: string, newPassword: string) => {
+    try {
+      await api.post('/api/auth/password/confirm-otp', { email, otp, newPassword })
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'OTP confirmation failed')
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
@@ -123,7 +161,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     adminRegister,
     register,
     logout,
-    loading
+    loading,
+    requestPasswordReset,
+    confirmPasswordReset,
+    sendResetOtp,
+    confirmResetOtp
   }
 
   return (

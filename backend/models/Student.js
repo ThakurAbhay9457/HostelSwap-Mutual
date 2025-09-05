@@ -29,7 +29,9 @@ const studentSchema = new mongoose.Schema({
   socialLinks: {
     google: { type: String },
     facebook: { type: String }
-  }
+  },
+  resetToken: { type: String },
+  resetTokenExpiresAt: { type: Date }
 });
 
 module.exports = mongoose.model('Student', studentSchema); 

@@ -38,8 +38,8 @@ const Students: React.FC = () => {
       const mockStudents: Student[] = [
         {
           id: '1',
-          name: 'John Doe',
-          email: 'john@example.com',
+          name: 'Abhay',
+          email: 'abhay@example.com',
           hostel: 'block1',
           bedType: '4 bedded',
           roomNumber: 101,
@@ -47,8 +47,8 @@ const Students: React.FC = () => {
         },
         {
           id: '2',
-          name: 'Jane Smith',
-          email: 'jane@example.com',
+          name: 'Soumik',
+          email: 'soumik@example.com',
           hostel: 'block2',
           bedType: '3 bedded',
           roomNumber: 205,
@@ -56,8 +56,8 @@ const Students: React.FC = () => {
         },
         {
           id: '3',
-          name: 'Mike Johnson',
-          email: 'mike@example.com',
+          name: 'Prateek',
+          email: 'prateek@example.com',
           hostel: 'block1',
           bedType: '2 bedded',
           roomNumber: 150,
@@ -65,8 +65,8 @@ const Students: React.FC = () => {
         },
         {
           id: '4',
-          name: 'Sarah Wilson',
-          email: 'sarah@example.com',
+          name: 'Aryan',
+          email: 'aryan@example.com',
           hostel: 'block3',
           bedType: '4 bedded',
           roomNumber: 301,
@@ -74,11 +74,20 @@ const Students: React.FC = () => {
         },
         {
           id: '5',
-          name: 'Alex Brown',
-          email: 'alex@example.com',
+          name: 'Yash',
+          email: 'yash@example.com',
           hostel: 'block2',
           bedType: '1 bedded',
           roomNumber: 220,
+          isVerified: true
+        },
+        {
+          id: '6',
+          name: 'Sagar',
+          email: 'sagar@example.com',
+          hostel: 'block4',
+          bedType: '3 bedded',
+          roomNumber: 401,
           isVerified: true
         }
       ]
